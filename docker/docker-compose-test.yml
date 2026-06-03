@@ -1,0 +1,18 @@
+services:
+  prometheus-agent:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus-agent-test
+    volumes:
+      # Relative path from docker-compose file location
+      - ../config/prometheus/prometheus-agent-config.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.agent.path=/prometheus'
+      - '--enable-feature=agent'
+      - '--log.level=debug'
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ... other services

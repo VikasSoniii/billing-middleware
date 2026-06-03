@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: billing-middleware
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: admin
+    #username: billing_user
+    #password: ${DB_PASSWORD:your_secure_password}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        compression.type: snappy
+        acks: all
+    consumer:
+      group-id: billing-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.type.mapping: "billingMessage:com.samsung.smp.billing_middleware.dto.BillingMessage"
+
+server:
+  port: 8080
+
+cortex:
+  distributor:
+    url: ${CORTEX_URL:http://cortex-distributor:9090/api/v1/push}
+
+billing:
+  kafka:
+    topic: tenant-ingestion-stats
+  flush:
+    interval: 60000  # Flush to Kafka every 60 seconds
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Logging for debugging
+logging:
+  level:
+    com.samsung.smp.billing_middleware: DEBUG
+    org.springframework.kafka: INFO
+    org.apache.kafka: WARN
