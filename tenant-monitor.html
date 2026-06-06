@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-Tenant Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .tenant-box {
+            background: #2d2d2d;
+            border: 2px solid #404040;
+            border-radius: 10px;
+            padding: 20px;
+            flex: 1;
+            min-width: 250px;
+        }
+        .tenant-a { border-color: #4ec9b0; }
+        .tenant-b { border-color: #ce9178; }
+        .count {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .tenant-a .count { color: #4ec9b0; }
+        .tenant-b .count { color: #ce9178; }
+        .label {
+            font-size: 14px;
+            color: #808080;
+            margin: 5px 0;
+        }
+        .tier {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .tier-basic { background: #4ec9b0; color: #1e1e1e; }
+        .tier-pro { background: #ce9178; color: #1e1e1e; }
+        .refresh-btn {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover { background: #1177bb; }
+        .delta {
+            font-size: 14px;
+            color: #6a9955;
+            margin: 5px 0;
+        }
+        .error {
+            color: #f44747;
+            font-size: 14px;
+        }
+        .status {
+            font-size: 12px;
+            color: #808080;
+            margin-top: 10px;
+        }
+        #lastUpdate {
+            color: #dcdcaa;
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+<h1>📊 Multi-Tenant Billing Monitor</h1>
+<div>
+    <button class="refresh-btn" onclick="refreshAll()">🔄 Refresh Now</button>
+    <span style="color: #808080; margin-left: 20px;">
+            Auto-refresh: <span id="countdown">10</span>s
+        </span>
+    <span id="lastUpdate" style="margin-left: 20px;"></span>
+</div>
+
+<div class="container" style="margin-top: 20px;">
+    <div class="tenant-box tenant-a">
+        <h2>🏢 Tenant A</h2>
+        <div id="tierA" class="tier">-</div>
+        <div class="count" id="countA">-</div>
+        <div class="label">Total Samples</div>
+        <div class="delta" id="deltaA"></div>
+        <div class="label">Batch Size: <span id="batchA">-</span></div>
+        <div class="error" id="errorA"></div>
+    </div>
+
+    <div class="tenant-box tenant-b">
+        <h2>🏭 Tenant B</h2>
+        <div id="tierB" class="tier">-</div>
+        <div class="count" id="countB">-</div>
+        <div class="label">Total Samples</div>
+        <div class="delta" id="deltaB"></div>
+        <div class="label">Batch Size: <span id="batchB">-</span></div>
+        <div class="error" id="errorB"></div>
+    </div>
+</div>
+
+<div style="margin-top: 20px; padding: 15px; background: #2d2d2d; border-radius: 5px;">
+    <strong>🔍 Comparison:</strong>
+    <span id="comparison" style="margin-left: 10px; color: #dcdcaa;"></span>
+</div>
+
+<div style="margin-top: 20px; padding: 15px; background: #2d2d2d; border-radius: 5px;">
+    <strong>🔗 Direct Links:</strong><br>
+    <a href="http://localhost:8080/api/v1/debug/samples/tenant-a" target="_blank" style="color: #4ec9b0; margin-right: 20px;">Tenant A (JSON)</a>
+    <a href="http://localhost:8080/api/v1/debug/samples/tenant-b" target="_blank" style="color: #ce9178; margin-right: 20px;">Tenant B (JSON)</a>
+    <a href="http://localhost:8080/api/v1/health" target="_blank" style="color: #dcdcaa;">Health Check</a>
+</div>
+
+<div class="status" id="status">Initializing...</div>
+
+<script>
+    let previousA = 0;
+    let previousB = 0;
+    let countdownValue = 10;
+
+    async function fetchWithTimeout(url, timeout = 5000) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+            const response = await fetch(url, {
+                signal: controller.signal,
+                mode: 'cors',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            throw error;
+        }
+    }
+
+    async function fetchTenantData(tenantId) {
+        const url = `http://localhost:8080/api/v1/debug/samples/${tenantId}`;
+
+        try {
+            const response = await fetchWithTimeout(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error(`Error fetching ${tenantId}:`, error);
+            throw error;
+        }
+    }
+
+    function updateTenantUI(tenantId, data, previousValue) {
+        const prefix = tenantId === 'tenant-a' ? 'A' : 'B';
+        const errorId = `error${prefix}`;
+
+        // Clear any previous errors
+        document.getElementById(errorId).textContent = '';
+
+        // Update count
+        document.getElementById(`count${prefix}`).textContent =
+            data.exactSampleCount.toLocaleString();
+
+        // Update tier
+        const tierElement = document.getElementById(`tier${prefix}`);
+        const tier = data.billingTier || 'FREE';
+        tierElement.textContent = tier;
+        tierElement.className = `tier tier-${tier.toLowerCase()}`;
+
+        // Update batch size
+        document.getElementById(`batch${prefix}`).textContent =
+            data.batchSizes?.[tenantId] || 0;
+
+        // Calculate delta
+        const delta = data.exactSampleCount - previousValue;
+        const deltaElement = document.getElementById(`delta${prefix}`);
+        if (delta > 0) {
+            deltaElement.textContent = `+${delta} new samples`;
+            deltaElement.style.color = '#6a9955';
+        } else if (delta === 0 && previousValue > 0) {
+            deltaElement.textContent = 'No change';
+            deltaElement.style.color = '#808080';
+        } else {
+            deltaElement.textContent = 'First reading';
+            deltaElement.style.color = '#dcdcaa';
+        }
+
+        return data.exactSampleCount;
+    }
+
+    async function refreshAll() {
+        document.getElementById('status').textContent = 'Fetching data...';
+
+        let newA = previousA;
+        let newB = previousB;
+
+        // Fetch Tenant A
+        try {
+            const dataA = await fetchTenantData('tenant-a');
+            newA = updateTenantUI('tenant-a', dataA, previousA);
+        } catch (error) {
+            document.getElementById('errorA').textContent =
+                `⚠ Error: ${error.message}`;
+        }
+
+        // Fetch Tenant B
+        try {
+            const dataB = await fetchTenantData('tenant-b');
+            newB = updateTenantUI('tenant-b', dataB, previousB);
+        } catch (error) {
+            document.getElementById('errorB').textContent =
+                `⚠ Error: ${error.message}`;
+        }
+
+        // Update comparison
+        const diff = newB - newA;
+        const ratio = newA > 0 ? (newB / newA).toFixed(2) : 'N/A';
+
+        if (newA > 0 && newB > 0) {
+            document.getElementById('comparison').textContent =
+                `Tenant B has ${diff.toLocaleString()} more samples (${ratio}x more than Tenant A)`;
+        } else if (newA === 0 && newB === 0) {
+            document.getElementById('comparison').textContent =
+                'Waiting for data from both tenants...';
+        } else {
+            document.getElementById('comparison').textContent =
+                `Tenant A: ${newA} | Tenant B: ${newB}`;
+        }
+
+        previousA = newA;
+        previousB = newB;
+        countdownValue = 10;
+
+        const now = new Date();
+        document.getElementById('lastUpdate').textContent =
+            `Last updated: ${now.toLocaleTimeString()}`;
+        document.getElementById('status').textContent =
+            '✅ Connected to billing middleware';
+    }
+
+    // Auto-refresh every 10 seconds
+    setInterval(() => {
+        countdownValue--;
+        document.getElementById('countdown').textContent = countdownValue;
+        if (countdownValue <= 0) {
+            refreshAll();
+        }
+    }, 1000);
+
+    // Initial load
+    refreshAll();
+</script>
+</body>
+</html>

@@ -1,10 +1,36 @@
 services:
-  prometheus-agent:
+  # Redis Server
+  redis:
+    image: redis:7-alpine
+    container_name: redis-test
+    ports:
+      - "6380:6380"
+
+  # Node Exporter
+  node-exporter-test:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter-test
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+
+  # Redis Exporter
+  redis-exporter-test:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter-test
+    environment:
+      REDIS_ADDR: redis://redis-test:6380
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+    restart: unless-stopped
+  # Prometheus Agent 1 - Tenant A
+  prometheus-agent-tenant-a:
     image: prom/prometheus:v2.47.0
-    container_name: prometheus-agent-test
+    container_name: prometheus-tenant-a
     volumes:
-      # Relative path from docker-compose file location
-      - ../config/prometheus/prometheus-agent-config.yml:/etc/prometheus/prometheus.yml
+      - ../config/prometheus/prometheus-agent-config-tenant-a.yml:/etc/prometheus/prometheus.yml
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.agent.path=/prometheus'
@@ -14,5 +40,21 @@ services:
       - "9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
 
-  # ... other services
+  # Prometheus Agent 2 - Tenant B
+  prometheus-agent-tenant-b:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus-tenant-b
+    volumes:
+      - ../config/prometheus/prometheus-agent-config-tenant-b.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.agent.path=/prometheus'
+      - '--enable-feature=agent'
+      - '--log.level=debug'
+    ports:
+      - "9093:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

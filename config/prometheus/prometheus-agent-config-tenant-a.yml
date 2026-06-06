@@ -1,9 +1,11 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 30s
+  evaluation_interval: 30s
   external_labels:
     environment: local-test
-    region: development
+    region: us-east-1
+    tenant: tenant-a
+    agent: prometheus-agent-a
 
 scrape_configs:
   - job_name: 'node-exporter'
@@ -11,20 +13,22 @@ scrape_configs:
       - targets: ['node-exporter-test:9100']
         labels:
           source: 'node'
+          tenant: 'tenant-a'
 
   - job_name: 'redis-exporter'
     static_configs:
       - targets: ['redis-exporter-test:9121']
         labels:
           source: 'redis'
+          tenant: 'tenant-a'
 
 remote_write:
   - url: 'http://host.docker.internal:8080/api/v1/push'
     headers:
-      X-Scope-OrgID: 'test-tenant-local'
+      X-Scope-OrgID: 'tenant-a'
     queue_config:
-      capacity: 2500
-      max_shards: 10
+      capacity: 500
+      max_shards: 5
       min_shards: 1
-      max_samples_per_send: 100
-      batch_send_deadline: 5s
+      max_samples_per_send: 50
+      batch_send_deadline: 10s
