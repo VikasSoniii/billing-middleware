@@ -40,7 +40,27 @@ server:
 
 cortex:
   distributor:
-    url: ${CORTEX_URL:http://cortex-distributor:9090/api/v1/push}
+    url: http://localhost:9009/api/v1/push
+    #url: ${CORTEX_URL:http://cortex-distributor:9091/api/v1/push}
+  forward:
+    enabled: true  # Set to false to skip Cortex forwarding
+  retry:
+    maxAttempts: 3
+
+# Resilience4j
+resilience4j:
+  circuitbreaker:
+    instances:
+      cortex:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+# Enable Retry
+  retry:
+    enabled: true
 
 billing:
   kafka:
